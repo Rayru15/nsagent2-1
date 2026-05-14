@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>본부대항전 - 2인용 달리기 게임</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1 id="page-title">본부대항전 2인용 달리기</h1>
+    <div id="game-container">
+        <div class="player-area" id="player1-area">
+            <div class="hud">
+                <span class="label">PLAYER 1 (W: 점프 / 2단점프)</span>
+                <span class="score" id="score1">0 m</span>
+            </div>
+            <canvas id="canvas1" width="1200" height="280"></canvas>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="player-area" id="player2-area">
+            <div class="hud">
+                <span class="label">PLAYER 2 (↑: 점프 / 2단점프)</span>
+                <span class="score" id="score2">0 m</span>
+            </div>
+            <canvas id="canvas2" width="1200" height="280"></canvas>
+        </div>
+
+        <div id="start-overlay">
+            <div class="overlay-content">
+                <h1>본부대항전 달리기</h1>
+                <p class="rules">
+                    <strong>PLAYER 1</strong> — <kbd>W</kbd> 키로 점프 (2단점프 가능)<br>
+                    <strong>PLAYER 2</strong> — <kbd>↑</kbd> 키로 점프 (2단점프 가능)<br>
+                    장애물에 닿으면 탈락!
+                </p>
+                <button id="start-btn" class="action-btn">게임 시작</button>
+            </div>
+        </div>
+
+        <div id="overlay" class="hidden">
+            <div class="overlay-content">
+                <h1 id="result-text">결과</h1>
+                <p id="result-detail"></p>
+                <button id="restart-btn" class="action-btn">다시 시작 (Space)</button>
+            </div>
+        </div>
+
+        <div id="countdown" class="hidden">3</div>
+    </div>
+    <script src="main.js"></script>
+</body>
+</html>
