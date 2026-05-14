@@ -5,7 +5,7 @@
 }
 
 body {
-    background: #eef0f3;
+    background: #1a252f;
     color: #fff;
     font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
     min-height: 100vh;
@@ -14,16 +14,25 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 32px 24px;
-    gap: 24px;
+    padding: 24px;
+    gap: 14px;
 }
 
 #page-title {
-    color: #1a1d24;
+    color: #fff;
     font-size: 28px;
     font-weight: 800;
     letter-spacing: 1px;
     text-align: center;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+#speed-display {
+    color: #f1c40f;
+    font-size: 18px;
+    font-weight: 700;
+    text-align: center;
+    min-height: 26px;
 }
 
 #game-container {
@@ -31,11 +40,12 @@ body {
     display: flex;
     flex-direction: column;
     width: min(1400px, 92vw);
-    height: min(720px, 78vh);
-    border-radius: 18px;
+    height: min(780px, 82vh);
+    border: 6px solid #34495e;
+    border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-    background: #1a1d24;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+    background: #ecf0f1;
 }
 
 .player-area {
@@ -47,11 +57,11 @@ body {
 }
 
 #player1-area {
-    background: linear-gradient(180deg, #93c5fd 0%, #dbeafe 60%, #fef3c7 100%);
+    background: #f5f6f7;
 }
 
 #player2-area {
-    background: linear-gradient(180deg, #fda4af 0%, #fecdd3 60%, #fef3c7 100%);
+    background: #d1d5d9;
 }
 
 .hud {
@@ -59,24 +69,46 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 24px;
-    background: rgba(26, 29, 36, 0.85);
-    backdrop-filter: blur(4px);
+    background: rgba(52, 73, 94, 0.92);
     z-index: 2;
     color: #fff;
 }
 
+#player1-area .hud {
+    border-left: 6px solid #2980b9;
+}
+
+#player2-area .hud {
+    border-left: 6px solid #c0392b;
+}
+
 .label {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
+}
+
+.label kbd {
+    background: #1a252f;
+    border: 1px solid #555;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin: 0 2px;
+    font-family: 'Consolas', monospace;
+    font-weight: 700;
+    color: #f1c40f;
 }
 
 .score {
     font-size: 22px;
     font-weight: 800;
-    color: #fbbf24;
+    color: #f1c40f;
     text-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
 }
+
+.p1-text { color: #2980b9; }
+.p2-text { color: #c0392b; }
 
 canvas {
     flex: 1;
@@ -87,8 +119,7 @@ canvas {
 
 .divider {
     height: 4px;
-    background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
-    box-shadow: 0 0 12px rgba(251, 191, 36, 0.7);
+    background: #7f8c8d;
     z-index: 3;
 }
 
@@ -124,17 +155,17 @@ canvas {
 }
 
 .overlay-content h1 {
-    font-size: 56px;
+    font-size: 52px;
     margin-bottom: 24px;
-    color: #fff;
-    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    color: #f1c40f;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
 .overlay-content p {
     font-size: 18px;
     margin-bottom: 28px;
-    color: #f3f4f6;
-    line-height: 1.8;
+    color: #ecf0f1;
+    line-height: 1.9;
 }
 
 .rules kbd {
@@ -154,19 +185,18 @@ canvas {
     font-size: 20px;
     font-weight: 700;
     padding: 16px 40px;
-    background: #fbbf24;
-    color: #1a1d24;
+    background: #f1c40f;
+    color: #1a252f;
     border: none;
     border-radius: 8px;
     cursor: pointer;
     transition: transform 0.1s, box-shadow 0.2s;
-    /* 버튼은 항상 클릭 가능 */
     pointer-events: auto;
 }
 
 .action-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(251, 191, 36, 0.5);
+    box-shadow: 0 8px 20px rgba(241, 196, 15, 0.5);
 }
 
 .action-btn:active {

@@ -1,75 +1,124 @@
 // ==========================================
-// 본부대항전 2인용 달리기 게임
+// 우당탕탕 사무실 런 - 본부대항전
 // ==========================================
 
 const GRAVITY = 0.9;
-const JUMP_POWER = -16;
-const GROUND_Y_RATIO = 0.82;
+const JUMP_POWER = -17;          // 1단점프 (높)
+const DOUBLE_JUMP_POWER = -13;   // 2단점프 (추가 부스트)
+const GROUND_PAD = 22;
 const BASE_SPEED = 7;
-const SPEED_RAMP = 0.0008;
-const OBSTACLE_MIN_GAP = 320;
-const OBSTACLE_MAX_GAP = 700;
+const MAX_SPEED = 14;
+const SPEED_RAMP = 0.0008;       // 원래 곡선
+const OBSTACLE_MIN_GAP = 360;
+const OBSTACLE_MAX_GAP = 720;
+const BG_TILE = 400;
+const CEILING_PAD = 40;          // 위쪽 여유 — 공중 장애물 통과용
 
 const STATE = {
     READY: 'ready',
     COUNTDOWN: 'countdown',
     PLAYING: 'playing',
+    FINISHING: 'finishing',
     FINISHED: 'finished',
 };
 
+const PLAYER_PRESETS = {
+    p1: {
+        // 팀장님 — 사무실 사무용품 테마
+        shirt: '#ffffff',
+        suit: '#1f2937',
+        tie: '#2980b9',
+        wall: '#fafbfc',
+        floor: '#e2e6ea',
+        prop: '#e1e5ea',
+        propShade: '#cdd3d8',
+        cabinet: '#c8cdd2',
+        windowSky: '#cfe6f5',
+        loseLabel: '야근 확정',
+        loseEmoji: '💻',
+        winLabel: '칼퇴 확정',
+        winEmoji: '🏃‍♂️',
+        teamLabel: '팀장님 (1P)',
+        // P1 장애물 세트
+        obstacleSet: 'office',
+    },
+    p2: {
+        // 사원 — 회의실 가구 테마
+        shirt: '#ffffff',
+        suit: '#1f2937',
+        tie: '#c0392b',
+        wall: '#f0f2f4',
+        floor: '#cdd3d8',
+        prop: '#d8dde2',
+        propShade: '#bcc2c8',
+        cabinet: '#b8bec5',
+        windowSky: '#cfe6f5',
+        loseLabel: '야근 확정',
+        loseEmoji: '💻',
+        winLabel: '칼퇴 확정',
+        winEmoji: '🏃‍♂️',
+        teamLabel: '사원 (2P)',
+        // P2 장애물 세트
+        obstacleSet: 'meeting',
+    },
+};
+
 // ------------------------------------------
-// 플레이어 클래스
+// 플레이어
 // ------------------------------------------
 class Player {
-    constructor(canvas, color, accentColor, name) {
+    constructor(canvas, preset) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.color = color;
-        this.accentColor = accentColor;
-        this.name = name;
+        this.preset = preset;
         this.reset();
     }
 
     reset() {
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
-        this.x = 120;
-        this.y = groundY;
+        this.width = 42;
+        this.height = 64;
+        this.x = 90;
+        this.y = this.groundY() - this.height;
         this.vy = 0;
-        this.width = 44;
-        this.height = 60;
         this.onGround = true;
-        this.jumpsUsed = 0;
+        this.jumpCount = 0;
         this.alive = true;
         this.distance = 0;
         this.speed = BASE_SPEED;
         this.obstacles = [];
         this.bgOffset = 0;
-        this.cloudOffset = 0;
         this.runFrame = 0;
-        this.deathFlash = 0;
-        this.nextObstacleAt = 400;
+        this.frame = 0;
         this.particles = [];
-        this.dustTimer = 0;
+        this.celebParticles = [];
+        this.deathFlash = 0;
         this.jumpFlash = 0;
+        this.dustTimer = 0;
+        this.nextObstacleAt = 380;
+        this.resultText = '';
+        this.resultIsWin = false;
+    }
+
+    groundY() {
+        return this.canvas.height - GROUND_PAD;
     }
 
     jump() {
         if (!this.alive) return;
-        if (this.jumpsUsed < 2) {
-            this.vy = JUMP_POWER;
-            this.jumpsUsed++;
+        if (this.jumpCount < 2) {
+            this.jumpCount++;
+            this.vy = (this.jumpCount === 1) ? JUMP_POWER : DOUBLE_JUMP_POWER;
             this.onGround = false;
             this.jumpFlash = 280;
-            this.spawnJumpBurst(this.jumpsUsed === 2);
+            this.spawnJumpBurst(this.jumpCount === 2);
         }
     }
 
     spawnJumpBurst(isDouble) {
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
         const cx = this.x + this.width / 2;
-        const cy = isDouble ? this.y - this.height / 2 : groundY;
+        const cy = isDouble ? this.y + this.height / 2 : this.groundY();
         const count = isDouble ? 14 : 8;
-        const color = isDouble ? '#fde047' : '#ffffff';
+        const color = isDouble ? '#f1c40f' : '#ffffff';
         for (let i = 0; i < count; i++) {
             const angle = isDouble
                 ? (Math.PI * 2 * i) / count
@@ -88,24 +137,23 @@ class Player {
     }
 
     spawnDust() {
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
         this.particles.push({
             x: this.x + this.width / 2 + (Math.random() - 0.5) * 6,
-            y: groundY - 2,
+            y: this.groundY() - 2,
             vx: -this.speed * 0.4 - Math.random() * 1.5,
             vy: -Math.random() * 1.2,
-            life: 360, maxLife: 360,
+            life: 320, maxLife: 320,
             size: 2 + Math.random() * 3,
-            color: '#ffffff',
+            color: 'rgba(120, 120, 120, 0.7)',
             gravity: 0.05,
         });
     }
 
     spawnDeathBurst() {
         const cx = this.x + this.width / 2;
-        const cy = this.y - this.height / 2;
-        for (let i = 0; i < 24; i++) {
-            const angle = (Math.PI * 2 * i) / 24 + Math.random() * 0.3;
+        const cy = this.y + this.height / 2;
+        for (let i = 0; i < 22; i++) {
+            const angle = (Math.PI * 2 * i) / 22 + Math.random() * 0.3;
             const speed = 3 + Math.random() * 4;
             this.particles.push({
                 x: cx, y: cy,
@@ -113,57 +161,101 @@ class Player {
                 vy: Math.sin(angle) * speed,
                 life: 700, maxLife: 700,
                 size: 4 + Math.random() * 4,
-                color: i % 2 === 0 ? '#ef4444' : '#fbbf24',
+                color: i % 2 === 0 ? '#e74c3c' : '#f1c40f',
                 gravity: 0.2,
             });
         }
     }
 
+    spawnCelebration() {
+        // 우승 색종이
+        const w = this.canvas.width;
+        for (let i = 0; i < 60; i++) {
+            const hue = Math.random() * 360;
+            this.celebParticles.push({
+                x: Math.random() * w,
+                y: -10 - Math.random() * 100,
+                vx: (Math.random() - 0.5) * 3,
+                vy: 1 + Math.random() * 2,
+                life: 3000, maxLife: 3000,
+                size: 4 + Math.random() * 4,
+                color: `hsl(${hue}, 85%, 60%)`,
+                gravity: 0.04,
+                spin: Math.random() * Math.PI * 2,
+                spinSpeed: (Math.random() - 0.5) * 0.2,
+            });
+        }
+    }
+
+    die() {
+        if (!this.alive) return;
+        this.alive = false;
+        this.deathFlash = 400;
+        this.resultText = this.preset.loseLabel;
+        this.spawnDeathBurst();
+    }
+
+    win() {
+        this.resultIsWin = true;
+        this.resultText = this.preset.winLabel;
+        this.spawnCelebration();
+    }
+
     update(dt) {
         this.updateParticles(dt);
+        this.updateCelebration(dt);
 
         if (!this.alive) {
             this.deathFlash = Math.max(0, this.deathFlash - dt);
+            // 죽어도 장애물은 마저 흘러감 (시각 효과)
+            for (const obs of this.obstacles) obs.x -= this.speed * 0.3;
+            this.bgOffset -= this.speed * 0.2;
             return;
         }
 
-        // 속도 점점 증가
-        this.speed += SPEED_RAMP * dt;
+        if (this.resultIsWin) {
+            // 칼퇴 - 계속 달리되 장애물 안 나오게
+            this.distance += this.speed * (dt / 16);
+            this.bgOffset = (this.bgOffset - this.speed * 0.5) % BG_TILE;
+            this.runFrame += this.speed * 0.05;
+            return;
+        }
+
+        this.frame++;
+        // 속도 점진 증가 (원래 곡선)
+        if (this.speed < MAX_SPEED) this.speed += SPEED_RAMP * dt;
         this.jumpFlash = Math.max(0, this.jumpFlash - dt);
 
-        // 점프 물리
+        // 물리
         const wasInAir = !this.onGround;
         this.vy += GRAVITY;
         this.y += this.vy;
 
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
-        if (this.y >= groundY) {
-            this.y = groundY;
+        const gy = this.groundY();
+        if (this.y + this.height >= gy) {
+            this.y = gy - this.height;
             this.vy = 0;
             this.onGround = true;
-            this.jumpsUsed = 0;
+            this.jumpCount = 0;
             if (wasInAir) {
-                // 착지 먼지
                 for (let i = 0; i < 6; i++) this.spawnDust();
             }
         }
 
-        // 달리는 동안 먼지
         if (this.onGround) {
             this.dustTimer -= dt;
             if (this.dustTimer <= 0) {
                 this.spawnDust();
-                this.dustTimer = 90;
+                this.dustTimer = 80;
             }
         }
 
-        // 거리, 배경 스크롤
-        this.distance += this.speed * (dt / 16);
-        this.bgOffset = (this.bgOffset + this.speed) % this.canvas.width;
-        this.cloudOffset = (this.cloudOffset + this.speed * 0.3) % this.canvas.width;
+        // 스크롤
+        this.distance += this.speed;
+        this.bgOffset = (this.bgOffset - this.speed * 0.5) % BG_TILE;
         this.runFrame += this.speed * 0.05;
 
-        // 장애물 스폰
+        // 장애물 스폰 (거리 기반, 최소~최대 갭 사이)
         if (this.distance > this.nextObstacleAt) {
             this.spawnObstacle();
             const gap = OBSTACLE_MIN_GAP + Math.random() * (OBSTACLE_MAX_GAP - OBSTACLE_MIN_GAP);
@@ -173,58 +265,60 @@ class Player {
         // 장애물 이동 + 충돌
         for (const obs of this.obstacles) {
             obs.x -= this.speed;
-            if (this.checkCollision(obs)) {
-                this.die();
+            if (obs.bobBase != null) {
+                obs.bobPhase += 0.08;
+                obs.y = obs.bobBase + Math.sin(obs.bobPhase) * 5;
             }
+            if (this.checkCollision(obs)) this.die();
         }
-        this.obstacles = this.obstacles.filter(o => o.x + o.width > -20);
+        this.obstacles = this.obstacles.filter(o => o.x + o.width > -30);
     }
 
     spawnObstacle() {
-        const types = ['cactus', 'cactus', 'rock', 'bird'];
-        const type = types[Math.floor(Math.random() * types.length)];
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
+        // 난이도 동일, 외형만 P1/P2 다르게
+        // 50% low(1단점프), 30% high(2단점프 필수), 20% air(점프하면 안 됨)
+        const r = Math.random();
+        const gy = this.groundY();
+        const set = this.preset.obstacleSet;
 
-        if (type === 'cactus') {
+        if (r < 0.5) {
+            // 낮은 장애물 — 1단점프로 통과
+            const variant = set === 'office' ? 'box' : 'chair';
             this.obstacles.push({
-                type, x: this.canvas.width + 50,
-                y: groundY - 50, width: 26, height: 50,
+                type: 'low', variant,
+                x: this.canvas.width,
+                y: gy - 38, width: 36, height: 38,
             });
-        } else if (type === 'rock') {
+        } else if (r < 0.8) {
+            // 높은 장애물 — 반드시 2단점프
+            const variant = set === 'office' ? 'cabinet' : 'whiteboard';
             this.obstacles.push({
-                type, x: this.canvas.width + 50,
-                y: groundY - 28, width: 38, height: 28,
+                type: 'high', variant,
+                x: this.canvas.width,
+                y: gy - 105, width: 46, height: 105,
             });
-        } else if (type === 'bird') {
-            // 새는 공중에 위치 - 첫 점프나 슬라이드 회피 가능
-            const heights = [70, 110];
-            const h = heights[Math.floor(Math.random() * heights.length)];
+        } else {
+            // 공중 장애물 — 점프하면 부딪힘 (서서 달려야 통과)
+            const variant = set === 'office' ? 'fan' : 'projector';
+            const obsHeight = 32;
+            // 캐릭터 머리(gy - 64) 위 ~24px 지점에 하단이 오도록
+            const obsY = gy - 64 - 24 - obsHeight;
             this.obstacles.push({
-                type, x: this.canvas.width + 50,
-                y: groundY - h, width: 40, height: 28,
+                type: 'air', variant,
+                x: this.canvas.width,
+                y: obsY, bobBase: obsY,
+                width: 60, height: obsHeight,
+                bobPhase: Math.random() * Math.PI * 2,
             });
         }
     }
 
     checkCollision(obs) {
-        // 약간의 관용 적용 (히트박스 축소)
-        const pad = 6;
-        const px = this.x + pad;
-        const py = this.y - this.height + pad;
-        const pw = this.width - pad * 2;
-        const ph = this.height - pad * 2;
-
-        return px < obs.x + obs.width &&
-            px + pw > obs.x &&
-            py < obs.y + obs.height &&
-            py + ph > obs.y;
-    }
-
-    die() {
-        if (!this.alive) return;
-        this.alive = false;
-        this.deathFlash = 400;
-        this.spawnDeathBurst();
+        const pad = 5;
+        return this.x + pad < obs.x + obs.width &&
+            this.x + this.width - pad > obs.x &&
+            this.y < obs.y + obs.height &&
+            this.y + this.height > obs.y;
     }
 
     updateParticles(dt) {
@@ -235,6 +329,160 @@ class Player {
             p.life -= dt;
         }
         this.particles = this.particles.filter(p => p.life > 0);
+    }
+
+    updateCelebration(dt) {
+        const h = this.canvas.height;
+        for (const p of this.celebParticles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += p.gravity;
+            p.spin += p.spinSpeed;
+            p.life -= dt;
+            if (p.y > h + 20) p.life = 0;
+        }
+        this.celebParticles = this.celebParticles.filter(p => p.life > 0);
+    }
+
+    // -------- 그리기 --------
+    draw() {
+        const ctx = this.ctx;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const gy = this.groundY();
+
+        ctx.clearRect(0, 0, w, h);
+
+        // 사무실 배경
+        this.drawOfficeBackground(ctx, w, h, gy);
+
+        // 입자 (장애물 뒤)
+        this.drawParticles(ctx);
+
+        // 장애물
+        for (const obs of this.obstacles) {
+            this.drawObstacle(ctx, obs);
+        }
+
+        // 플레이어
+        this.drawPlayer(ctx, gy);
+
+        // 점프 링
+        if (this.jumpFlash > 0 && this.alive) {
+            const a = this.jumpFlash / 280;
+            ctx.strokeStyle = `rgba(241, 196, 15, ${a})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(this.x + this.width / 2, gy,
+                (1 - a) * 48 + 10, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // 우승 색종이 (제일 위)
+        this.drawCelebration(ctx);
+
+        // 사망 플래시
+        if (!this.alive && this.deathFlash > 0) {
+            ctx.fillStyle = `rgba(231, 76, 60, ${this.deathFlash / 1000})`;
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        // 결과 텍스트 (게임 종료 후)
+        if (this.resultText) {
+            this.drawResultBanner(ctx, w, h);
+        }
+    }
+
+    drawOfficeBackground(ctx, w, h, gy) {
+        const p = this.preset;
+
+        // 벽
+        ctx.fillStyle = p.wall;
+        ctx.fillRect(0, 0, w, gy);
+
+        // 바닥
+        ctx.fillStyle = p.floor;
+        ctx.fillRect(0, gy, w, h - gy);
+
+        // 바닥 위 강조선
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(0, gy, w, 2);
+
+        // 스크롤되는 소품들 (BG_TILE 단위로 반복)
+        ctx.save();
+        ctx.translate(this.bgOffset, 0);
+
+        const tilesNeeded = Math.ceil(w / BG_TILE) + 2;
+        for (let i = -1; i < tilesNeeded; i++) {
+            const startX = i * BG_TILE;
+            this.drawOfficeProps(ctx, startX, gy, p);
+        }
+
+        ctx.restore();
+
+        // 천장 형광등
+        ctx.fillStyle = '#bdc3c7';
+        ctx.fillRect(0, 0, w, 6);
+        const lightOffset = ((this.bgOffset * 1.2) % 200 + 200) % 200;
+        ctx.fillStyle = '#f1c40f';
+        for (let i = -1; i < Math.ceil(w / 200) + 1; i++) {
+            ctx.fillRect(i * 200 - lightOffset + 40, 0, 80, 4);
+        }
+    }
+
+    drawOfficeProps(ctx, startX, gy, p) {
+        // 배경 소품은 의도적으로 연하게 — 장애물/캐릭터가 부각되도록
+        ctx.globalAlpha = 0.55;
+
+        // 책상
+        ctx.fillStyle = p.prop;
+        ctx.fillRect(startX + 50, gy - 50, 110, 50);
+        ctx.fillStyle = p.propShade;
+        ctx.fillRect(startX + 50, gy - 50, 110, 3);
+        // 책상 다리
+        ctx.fillStyle = p.propShade;
+        ctx.fillRect(startX + 54, gy - 10, 6, 10);
+        ctx.fillRect(startX + 150, gy - 10, 6, 10);
+        // 모니터 (옅은 회색 톤)
+        ctx.fillStyle = '#9aa4ad';
+        ctx.fillRect(startX + 80, gy - 90, 50, 38);
+        ctx.fillStyle = '#cfe6f5';
+        ctx.fillRect(startX + 84, gy - 86, 42, 30);
+        ctx.fillStyle = '#9aa4ad';
+        ctx.fillRect(startX + 100, gy - 52, 10, 6);
+        ctx.fillRect(startX + 90, gy - 46, 30, 4);
+
+        // 파티션
+        ctx.fillStyle = p.prop;
+        ctx.fillRect(startX + 180, 30, 8, gy - 30);
+        ctx.fillStyle = p.propShade;
+        ctx.fillRect(startX + 180, 30, 8, 2);
+
+        // 창문 (옅은 하늘색)
+        ctx.fillStyle = p.windowSky;
+        ctx.fillRect(startX + 220, 40, 90, 90);
+        // 창밖 빌딩 실루엣
+        ctx.fillStyle = 'rgba(100, 116, 130, 0.3)';
+        ctx.fillRect(startX + 230, 80, 18, 50);
+        ctx.fillRect(startX + 252, 65, 22, 65);
+        ctx.fillRect(startX + 278, 90, 20, 40);
+        // 창틀
+        ctx.fillStyle = '#eef0f3';
+        ctx.fillRect(startX + 215, 35, 5, 100);
+        ctx.fillRect(startX + 310, 35, 5, 100);
+        ctx.fillRect(startX + 215, 35, 100, 5);
+        ctx.fillRect(startX + 215, 130, 100, 5);
+        ctx.fillRect(startX + 262, 35, 4, 100);
+
+        // 캐비닛
+        ctx.fillStyle = p.cabinet;
+        ctx.fillRect(startX + 340, gy - 75, 52, 75);
+        ctx.fillStyle = p.propShade;
+        ctx.fillRect(startX + 346, gy - 70, 40, 5);
+        ctx.fillRect(startX + 346, gy - 50, 40, 5);
+        ctx.fillRect(startX + 346, gy - 30, 40, 5);
+
+        ctx.globalAlpha = 1;
     }
 
     drawParticles(ctx) {
@@ -249,333 +497,436 @@ class Player {
         ctx.globalAlpha = 1;
     }
 
-    draw() {
-        const ctx = this.ctx;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
-        const groundY = h * GROUND_Y_RATIO;
-
-        ctx.clearRect(0, 0, w, h);
-
-        // 구름
-        this.drawClouds(ctx, w);
-
-        // 산 (먼 배경)
-        this.drawMountains(ctx, w, groundY);
-
-        // 땅 (밝은 잔디톤)
-        const grad = ctx.createLinearGradient(0, groundY, 0, h);
-        grad.addColorStop(0, '#65a30d');
-        grad.addColorStop(1, '#365314');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, groundY, w, h - groundY);
-
-        // 땅 위쪽 강조선
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(0, groundY - 2, w, 3);
-
-        // 잔디 마디 (스크롤)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-        for (let i = 0; i < 20; i++) {
-            const dx = ((i * 80) - this.bgOffset) % w;
-            const x = dx < 0 ? dx + w : dx;
-            ctx.fillRect(x, groundY + 10, 30, 2);
+    drawCelebration(ctx) {
+        for (const p of this.celebParticles) {
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            ctx.rotate(p.spin);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.4);
+            ctx.restore();
         }
-
-        // 파티클 (장애물 뒤)
-        this.drawParticles(ctx);
-
-        // 장애물
-        for (const obs of this.obstacles) {
-            this.drawObstacle(ctx, obs);
-        }
-
-        // 플레이어
-        this.drawPlayer(ctx);
-
-        // 점프 플래시 링 (캐릭터 발 아래)
-        if (this.jumpFlash > 0) {
-            const a = this.jumpFlash / 280;
-            ctx.strokeStyle = `rgba(253, 224, 71, ${a})`;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, groundY,
-                (1 - a) * 50 + 10, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-
-        // 사망 플래시
-        if (!this.alive && this.deathFlash > 0) {
-            ctx.fillStyle = `rgba(255, 0, 0, ${this.deathFlash / 800})`;
-            ctx.fillRect(0, 0, w, h);
-        }
-
-        // 사망 텍스트
-        if (!this.alive) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(0, h / 2 - 44, w, 88);
-            ctx.fillStyle = '#fbbf24';
-            ctx.font = 'bold 44px Segoe UI, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('💥 탈락! 💥', w / 2, h / 2 + 14);
-        }
-    }
-
-    drawClouds(ctx, w) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.strokeStyle = 'rgba(120, 120, 140, 0.35)';
-        ctx.lineWidth = 1.5;
-        const clouds = [
-            { x: 100, y: 40, r: 18 },
-            { x: 400, y: 70, r: 22 },
-            { x: 700, y: 30, r: 16 },
-            { x: 1000, y: 60, r: 20 },
-        ];
-        for (const c of clouds) {
-            const dx = (c.x - this.cloudOffset) % w;
-            const x = dx < 0 ? dx + w : dx;
-            ctx.beginPath();
-            ctx.arc(x, c.y, c.r, 0, Math.PI * 2);
-            ctx.arc(x + c.r * 0.8, c.y + 4, c.r * 0.8, 0, Math.PI * 2);
-            ctx.arc(x - c.r * 0.8, c.y + 4, c.r * 0.9, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-        }
-    }
-
-    drawMountains(ctx, w, groundY) {
-        // 뒷산
-        ctx.fillStyle = '#a5b4fc';
-        const peaks = [0, 200, 450, 700, 950, 1200];
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        for (let i = 0; i < peaks.length; i++) {
-            const dx = (peaks[i] - this.cloudOffset * 0.5) % w;
-            const x = dx < 0 ? dx + w : dx;
-            ctx.lineTo(x, groundY - 90 - (i % 2) * 30);
-        }
-        ctx.lineTo(w, groundY);
-        ctx.closePath();
-        ctx.fill();
-
-        // 앞산 (조금 더 진하게)
-        ctx.fillStyle = '#7c8af0';
-        const peaks2 = [80, 320, 560, 820, 1080];
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        for (let i = 0; i < peaks2.length; i++) {
-            const dx = (peaks2[i] - this.cloudOffset * 0.8) % w;
-            const x = dx < 0 ? dx + w : dx;
-            ctx.lineTo(x, groundY - 50 - (i % 2) * 20);
-        }
-        ctx.lineTo(w, groundY);
-        ctx.closePath();
-        ctx.fill();
     }
 
     drawObstacle(ctx, obs) {
-        // 위협 글로우 (장애물 뒤 빨간 발광)
+        // 드롭 섀도우
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+        ctx.fillRect(obs.x + 4, obs.y + 5, obs.width, obs.height);
+
+        // 위협 글로우 (low=빨강, high=주황, air=보라)
         const cx = obs.x + obs.width / 2;
         const cy = obs.y + obs.height / 2;
-        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, obs.width);
-        glow.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
-        glow.addColorStop(1, 'rgba(239, 68, 68, 0)');
+        let glowColor;
+        if (obs.type === 'low') glowColor = '231, 76, 60';
+        else if (obs.type === 'high') glowColor = '230, 126, 34';
+        else glowColor = '155, 89, 182';
+        const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, obs.width * 1.4);
+        glow.addColorStop(0, `rgba(${glowColor}, 0.5)`);
+        glow.addColorStop(1, `rgba(${glowColor}, 0)`);
         ctx.fillStyle = glow;
         ctx.fillRect(obs.x - obs.width, obs.y - obs.width,
             obs.width * 3, obs.height + obs.width * 2);
 
-        ctx.strokeStyle = '#1a1d24';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 3;
 
-        if (obs.type === 'cactus') {
-            // 몸통
-            ctx.fillStyle = '#15803d';
-            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
-            ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
-            // 가지
-            ctx.fillStyle = '#16a34a';
-            ctx.fillRect(obs.x - 8, obs.y + 14, 10, 20);
-            ctx.strokeRect(obs.x - 8, obs.y + 14, 10, 20);
-            ctx.fillRect(obs.x + obs.width - 2, obs.y + 8, 10, 24);
-            ctx.strokeRect(obs.x + obs.width - 2, obs.y + 8, 10, 24);
-            // 가시
-            ctx.fillStyle = '#052e16';
-            ctx.fillRect(obs.x + 5, obs.y + 8, 4, 4);
-            ctx.fillRect(obs.x + 17, obs.y + 22, 4, 4);
-            ctx.fillRect(obs.x + 10, obs.y + 36, 4, 4);
-        } else if (obs.type === 'rock') {
-            ctx.fillStyle = '#404040';
+        const v = obs.variant;
+        if (v === 'box') this.drawBox(ctx, obs);
+        else if (v === 'chair') this.drawChair(ctx, obs);
+        else if (v === 'cabinet') this.drawCabinet(ctx, obs);
+        else if (v === 'whiteboard') this.drawWhiteboard(ctx, obs);
+        else if (v === 'fan') this.drawFan(ctx, obs);
+        else if (v === 'projector') this.drawProjector(ctx, obs);
+
+        // 공중 장애물에 "JUMP 금지" 표시 (위쪽에 X 마크)
+        if (obs.type === 'air') {
+            ctx.fillStyle = '#9b59b6';
+            ctx.fillRect(cx - 11, obs.y - 14, 22, 12);
+            ctx.strokeStyle = '#0f1419';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(cx - 11, obs.y - 14, 22, 12);
+            // X
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2,
-                obs.width / 2, obs.height / 2, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(cx - 6, obs.y - 11);
+            ctx.lineTo(cx + 6, obs.y - 5);
+            ctx.moveTo(cx + 6, obs.y - 11);
+            ctx.lineTo(cx - 6, obs.y - 5);
             ctx.stroke();
-            // 하이라이트
-            ctx.fillStyle = '#9ca3af';
-            ctx.beginPath();
-            ctx.ellipse(obs.x + obs.width / 2 - 6, obs.y + obs.height / 2 - 4,
-                obs.width / 3.5, obs.height / 4, 0, 0, Math.PI * 2);
-            ctx.fill();
-        } else if (obs.type === 'bird') {
-            const flap = Math.sin(this.runFrame * 0.8) > 0;
-            // 몸통
-            ctx.fillStyle = '#7c2d12';
-            ctx.beginPath();
-            ctx.ellipse(obs.x + obs.width / 2, obs.y + obs.height / 2,
-                obs.width / 2, obs.height / 3, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            // 날개
-            ctx.fillStyle = '#dc2626';
-            ctx.beginPath();
-            if (flap) {
-                ctx.moveTo(obs.x + 8, obs.y + 14);
-                ctx.lineTo(obs.x + 20, obs.y - 6);
-                ctx.lineTo(obs.x + 32, obs.y + 14);
-            } else {
-                ctx.moveTo(obs.x + 8, obs.y + 14);
-                ctx.lineTo(obs.x + 20, obs.y + 28);
-                ctx.lineTo(obs.x + 32, obs.y + 14);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            // 부리
-            ctx.fillStyle = '#fbbf24';
-            ctx.beginPath();
-            ctx.moveTo(obs.x + obs.width, obs.y + 14);
-            ctx.lineTo(obs.x + obs.width + 10, obs.y + 16);
-            ctx.lineTo(obs.x + obs.width, obs.y + 18);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-            // 눈
+        }
+
+        // 높은 장애물에 "↑↑" (2단점프) 표시
+        if (obs.type === 'high') {
+            ctx.fillStyle = '#e67e22';
+            ctx.fillRect(cx - 10, obs.y - 14, 20, 12);
+            ctx.strokeStyle = '#0f1419';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(cx - 10, obs.y - 14, 20, 12);
             ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(obs.x + obs.width - 8, obs.y + 11, 3, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = '#1a1d24';
-            ctx.beginPath();
-            ctx.arc(obs.x + obs.width - 7, obs.y + 11, 1.5, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.font = 'bold 10px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('↑↑', cx, obs.y - 7);
+            ctx.textBaseline = 'alphabetic';
         }
     }
 
-    drawPlayer(ctx) {
+    // -------- 장애물 종류별 그리기 --------
+    drawBox(ctx, obs) {
+        // P1 낮음 — 종이박스
+        ctx.fillStyle = '#a0522d';
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+        ctx.fillStyle = '#c97a4a';
+        ctx.fillRect(obs.x, obs.y, obs.width, 6);
+        ctx.strokeRect(obs.x, obs.y, obs.width, 6);
+        // 테이프 십자
+        ctx.fillStyle = '#f5deb3';
+        ctx.fillRect(obs.x, obs.y + obs.height / 2 - 4, obs.width, 8);
+        ctx.strokeStyle = '#7c4a1f';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(obs.x, obs.y + obs.height / 2 - 4, obs.width, 8);
+        ctx.fillStyle = '#f5deb3';
+        ctx.fillRect(obs.x + obs.width / 2 - 4, obs.y, 8, obs.height);
+        ctx.strokeRect(obs.x + obs.width / 2 - 4, obs.y, 8, obs.height);
+        // 빨간 ! 라벨
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(obs.x + obs.width / 2 - 7, obs.y + 12, 14, 12);
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(obs.x + obs.width / 2 - 7, obs.y + 12, 14, 12);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(obs.x + obs.width / 2 - 1, obs.y + 14, 2, 6);
+        ctx.fillRect(obs.x + obs.width / 2 - 1, obs.y + 21, 2, 2);
+    }
+
+    drawChair(ctx, obs) {
+        // P2 낮음 — 회의실 의자 (뒤집힌)
+        // 다리들
+        ctx.fillStyle = '#34495e';
+        ctx.fillRect(obs.x + 4, obs.y + obs.height - 18, 5, 18);
+        ctx.fillRect(obs.x + obs.width - 9, obs.y + obs.height - 18, 5, 18);
+        ctx.fillRect(obs.x + obs.width / 2 - 2, obs.y + obs.height - 22, 4, 22);
+        ctx.strokeRect(obs.x + 4, obs.y + obs.height - 18, 5, 18);
+        ctx.strokeRect(obs.x + obs.width - 9, obs.y + obs.height - 18, 5, 18);
+        ctx.strokeRect(obs.x + obs.width / 2 - 2, obs.y + obs.height - 22, 4, 22);
+        // 좌석
+        ctx.fillStyle = '#c0392b';
+        ctx.fillRect(obs.x, obs.y, obs.width, 14);
+        ctx.strokeRect(obs.x, obs.y, obs.width, 14);
+        // 등받이
+        ctx.fillStyle = '#a93226';
+        ctx.fillRect(obs.x + 6, obs.y + 14, obs.width - 12, 14);
+        ctx.strokeRect(obs.x + 6, obs.y + 14, obs.width - 12, 14);
+        // 좌석 광택
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        ctx.fillRect(obs.x + 3, obs.y + 3, obs.width - 6, 3);
+    }
+
+    drawCabinet(ctx, obs) {
+        // P1 높음 — 캐비닛 (서랍장)
+        ctx.fillStyle = '#1f3a5f';
+        ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(obs.x + 3, obs.y + 3, 4, obs.height - 6);
+        // 서랍 3단
+        const drawerCount = 3;
+        const drawerH = (obs.height - 10) / drawerCount;
+        for (let i = 0; i < drawerCount; i++) {
+            const dy = obs.y + 5 + i * drawerH;
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillRect(obs.x + 5, dy, obs.width - 10, drawerH - 3);
+            ctx.strokeStyle = '#0f1419';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(obs.x + 5, dy, obs.width - 10, drawerH - 3);
+            ctx.fillStyle = '#f1c40f';
+            ctx.fillRect(obs.x + obs.width / 2 - 7, dy + drawerH / 2 - 3, 14, 4);
+            ctx.strokeRect(obs.x + obs.width / 2 - 7, dy + drawerH / 2 - 3, 14, 4);
+        }
+    }
+
+    drawWhiteboard(ctx, obs) {
+        // P2 높음 — 화이트보드 (이동식 스탠드)
+        // 다리 (X자)
+        ctx.strokeStyle = '#34495e';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + 4, obs.y + obs.height);
+        ctx.lineTo(obs.x + obs.width - 4, obs.y + obs.height - 16);
+        ctx.moveTo(obs.x + obs.width - 4, obs.y + obs.height);
+        ctx.lineTo(obs.x + 4, obs.y + obs.height - 16);
+        ctx.stroke();
+        // 보드 본체
+        const boardH = obs.height - 20;
+        ctx.fillStyle = '#ecf0f1';
+        ctx.fillRect(obs.x, obs.y, obs.width, boardH);
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(obs.x, obs.y, obs.width, boardH);
+        // 프레임
+        ctx.strokeStyle = '#7f8c8d';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(obs.x + 2, obs.y + 2, obs.width - 4, boardH - 4);
+        // 그래프/글씨
+        ctx.strokeStyle = '#c0392b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + 6, obs.y + 30);
+        ctx.lineTo(obs.x + 16, obs.y + 18);
+        ctx.lineTo(obs.x + 26, obs.y + 25);
+        ctx.lineTo(obs.x + 38, obs.y + 12);
+        ctx.stroke();
+        // 파란 줄
+        ctx.strokeStyle = '#2980b9';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + 6, obs.y + 50);
+        ctx.lineTo(obs.x + obs.width - 6, obs.y + 60);
+        ctx.stroke();
+    }
+
+    drawFan(ctx, obs) {
+        // P1 공중 — 천장 선풍기 (점프 금지)
+        const cx = obs.x + obs.width / 2;
+        const cy = obs.y + obs.height / 2;
+        // 천장에서 내려오는 줄
+        ctx.strokeStyle = '#7f8c8d';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0);
+        ctx.lineTo(cx, obs.y);
+        ctx.stroke();
+        // 모터 본체
+        ctx.fillStyle = '#34495e';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // 회전하는 날개 (4장, 빠르게 회전)
+        const spin = this.runFrame * 3;
+        ctx.fillStyle = 'rgba(52, 73, 94, 0.85)';
+        ctx.strokeStyle = '#0f1419';
+        for (let i = 0; i < 4; i++) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(spin + (Math.PI / 2) * i);
+            ctx.beginPath();
+            ctx.ellipse(obs.width / 2 - 8, 0, obs.width / 2 - 10, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+        }
+        // 회전 모션 블러
+        ctx.strokeStyle = 'rgba(155, 89, 182, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, obs.width / 2 - 4, 0, Math.PI * 2);
+        ctx.stroke();
+    }
+
+    drawProjector(ctx, obs) {
+        // P2 공중 — 천장 프로젝터 (점프 금지)
+        const cx = obs.x + obs.width / 2;
+        // 천장 마운트
+        ctx.fillStyle = '#7f8c8d';
+        ctx.fillRect(cx - 3, 0, 6, obs.y);
+        // 본체
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(obs.x + 4, obs.y, obs.width - 8, obs.height);
+        ctx.strokeStyle = '#0f1419';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(obs.x + 4, obs.y, obs.width - 8, obs.height);
+        // 렌즈
+        ctx.fillStyle = '#1a252f';
+        ctx.beginPath();
+        ctx.arc(obs.x + obs.width - 14, obs.y + obs.height / 2, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#5dade2';
+        ctx.beginPath();
+        ctx.arc(obs.x + obs.width - 14, obs.y + obs.height / 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // 빔
+        const gradient = ctx.createLinearGradient(obs.x + obs.width, obs.y, obs.x + obs.width + 30, obs.y + 40);
+        gradient.addColorStop(0, 'rgba(255, 255, 200, 0.55)');
+        gradient.addColorStop(1, 'rgba(255, 255, 200, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(obs.x + obs.width - 8, obs.y + obs.height / 2);
+        ctx.lineTo(obs.x + obs.width + 30, obs.y - 4);
+        ctx.lineTo(obs.x + obs.width + 30, obs.y + obs.height + 4);
+        ctx.closePath();
+        ctx.fill();
+        // 작동 LED
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(obs.x + 8, obs.y + 4, 4, 4);
+    }
+
+    drawPlayer(ctx, gy) {
         const x = this.x;
-        const y = this.y - this.height;
+        const y = this.y;
         const w = this.width;
         const h = this.height;
+        const p = this.preset;
 
         // 그림자
-        const groundY = this.canvas.height * GROUND_Y_RATIO;
-        const shadowAlpha = Math.max(0, 1 - (groundY - this.y) / 200);
-        ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha * 0.4})`;
+        const shadowAlpha = Math.max(0, 1 - (gy - (y + h)) / 200);
+        ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha * 0.45})`;
         ctx.beginPath();
-        ctx.ellipse(x + w / 2, groundY + 4, w / 2, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + w / 2, gy + 4, w / 1.8, 6, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // 캐릭터 글로우 (배경에서 잘 보이게)
+        // 캐릭터 글로우 (배경에서 부각)
         const glow = ctx.createRadialGradient(
             x + w / 2, y + h / 2, 0,
-            x + w / 2, y + h / 2, w * 1.2
+            x + w / 2, y + h / 2, w * 1.4
         );
-        glow.addColorStop(0, 'rgba(255, 255, 255, 0.5)');
+        glow.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
         glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
         ctx.fillStyle = glow;
         ctx.fillRect(x - w, y - h / 2, w * 3, h * 2);
 
-        ctx.strokeStyle = '#1a1d24';
+        ctx.strokeStyle = '#0f1419';
         ctx.lineWidth = 2.5;
         ctx.lineJoin = 'round';
 
-        // 팔 (몸 뒤쪽)
-        const armSwing = this.onGround ? Math.sin(this.runFrame) * 6 : -4;
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x - 4, y + 22 + armSwing, 8, 18);
-        ctx.strokeRect(x - 4, y + 22 + armSwing, 8, 18);
+        // 셔츠 (상체)
+        const shirtH = h * 0.55;
+        ctx.fillStyle = p.shirt;
+        ctx.fillRect(x, y, w, shirtH);
+        ctx.strokeRect(x, y, w, shirtH);
 
-        // 몸통
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x, y + 18, w, h - 18);
-        ctx.strokeRect(x, y + 18, w, h - 18);
+        // 바지 (하체)
+        ctx.fillStyle = p.suit;
+        ctx.fillRect(x, y + shirtH, w, h - shirtH);
+        ctx.strokeRect(x, y + shirtH, w, h - shirtH);
 
-        // 몸통 하이라이트
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-        ctx.fillRect(x + 4, y + 22, 6, h - 28);
+        // 넥타이 (점프 시 휘날림)
+        ctx.fillStyle = p.tie;
+        const tieSwingX = !this.onGround ? -this.vy * 0.6 : 0;
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2 - 4, y + 4);
+        ctx.lineTo(x + w / 2 + 4, y + 4);
+        ctx.lineTo(x + w / 2 + 6 + tieSwingX, y + shirtH - 6);
+        ctx.lineTo(x + w / 2 - 6 + tieSwingX, y + shirtH - 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // 넥타이 매듭
+        ctx.fillStyle = p.tie;
+        ctx.fillRect(x + w / 2 - 5, y - 2, 10, 6);
+        ctx.strokeRect(x + w / 2 - 5, y - 2, 10, 6);
 
-        // 머리
-        ctx.fillStyle = '#fde68a';
-        ctx.fillRect(x + 8, y, w - 16, 24);
-        ctx.strokeRect(x + 8, y, w - 16, 24);
+        // 머리 (셔츠 위)
+        const headW = 26;
+        const headH = 22;
+        const headX = x + (w - headW) / 2;
+        const headY = y - headH;
+        ctx.fillStyle = '#ffe0b2';
+        ctx.fillRect(headX, headY, headW, headH);
+        ctx.strokeRect(headX, headY, headW, headH);
 
-        // 헬멧/머리 윗부분
-        ctx.fillStyle = this.accentColor;
-        ctx.fillRect(x + 6, y - 4, w - 12, 12);
-        ctx.strokeRect(x + 6, y - 4, w - 12, 12);
+        // 머리카락
+        ctx.fillStyle = '#3c2414';
+        ctx.fillRect(headX - 1, headY - 4, headW + 2, 8);
+        ctx.strokeRect(headX - 1, headY - 4, headW + 2, 8);
 
         // 눈
-        ctx.fillStyle = '#1a1d24';
-        ctx.fillRect(x + w - 16, y + 10, 5, 5);
+        ctx.fillStyle = '#1a252f';
+        ctx.fillRect(headX + 6, headY + 9, 4, 4);
+        ctx.fillRect(headX + headW - 10, headY + 9, 4, 4);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x + w - 15, y + 11, 2, 2);
+        ctx.fillRect(headX + 7, headY + 10, 1.5, 1.5);
+        ctx.fillRect(headX + headW - 9, headY + 10, 1.5, 1.5);
 
-        // 입 (살짝 웃음)
-        ctx.strokeStyle = '#1a1d24';
-        ctx.lineWidth = 2;
+        // 입 (긴장하면 살짝 벌어짐)
+        ctx.strokeStyle = '#1a252f';
+        ctx.lineWidth = 1.8;
         ctx.beginPath();
-        ctx.arc(x + w - 14, y + 19, 3, 0.1, Math.PI - 0.1);
+        if (this.onGround) {
+            ctx.moveTo(headX + headW / 2 - 3, headY + 17);
+            ctx.lineTo(headX + headW / 2 + 3, headY + 17);
+        } else {
+            ctx.arc(headX + headW / 2, headY + 17, 2, 0, Math.PI);
+        }
         ctx.stroke();
-        ctx.lineWidth = 2.5;
-        ctx.strokeStyle = '#1a1d24';
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#1a252f';
 
+        // 팔 (달리기 스윙)
+        const armSwing = this.onGround ? Math.sin(this.runFrame) * 7 : -5;
+        ctx.fillStyle = p.shirt;
+        // 뒤쪽 팔
+        ctx.fillRect(x - 6, y + 12 + armSwing, 8, shirtH - 14);
+        ctx.strokeRect(x - 6, y + 12 + armSwing, 8, shirtH - 14);
         // 앞쪽 팔
-        ctx.fillStyle = this.color;
-        ctx.fillRect(x + w - 4, y + 22 - armSwing, 8, 18);
-        ctx.strokeRect(x + w - 4, y + 22 - armSwing, 8, 18);
+        ctx.fillRect(x + w - 2, y + 12 - armSwing, 8, shirtH - 14);
+        ctx.strokeRect(x + w - 2, y + 12 - armSwing, 8, shirtH - 14);
+        // 손
+        ctx.fillStyle = '#ffe0b2';
+        ctx.fillRect(x - 6, y + 12 + armSwing + shirtH - 14, 8, 6);
+        ctx.fillRect(x + w - 2, y + 12 - armSwing + shirtH - 14, 8, 6);
 
-        // 다리 (달리기 애니메이션)
+        // 다리 / 신발
         if (this.onGround) {
             const legPhase = Math.sin(this.runFrame);
-            const leg1 = legPhase * 8;
-            const leg2 = -legPhase * 8;
-            ctx.fillStyle = '#1a1d24';
-            ctx.fillRect(x + 6, y + h - 4, 10, 10 + Math.max(0, leg1));
-            ctx.fillRect(x + w - 16, y + h - 4, 10, 10 + Math.max(0, leg2));
+            const legOffset1 = legPhase * 6;
+            const legOffset2 = -legPhase * 6;
             // 신발
-            ctx.fillStyle = '#fbbf24';
-            ctx.fillRect(x + 4 + leg1 * 0.3, y + h + 4, 14, 5);
-            ctx.fillRect(x + w - 18 + leg2 * 0.3, y + h + 4, 14, 5);
-            ctx.strokeRect(x + 4 + leg1 * 0.3, y + h + 4, 14, 5);
-            ctx.strokeRect(x + w - 18 + leg2 * 0.3, y + h + 4, 14, 5);
+            ctx.fillStyle = '#1a252f';
+            ctx.fillRect(x + 2 + legOffset1, y + h - 4, 16, 6);
+            ctx.fillRect(x + w - 18 + legOffset2, y + h - 4, 16, 6);
+            ctx.strokeRect(x + 2 + legOffset1, y + h - 4, 16, 6);
+            ctx.strokeRect(x + w - 18 + legOffset2, y + h - 4, 16, 6);
         } else {
-            // 점프 자세
-            ctx.fillStyle = '#1a1d24';
-            ctx.fillRect(x + 8, y + h - 4, 10, 12);
-            ctx.fillRect(x + w - 18, y + h - 8, 10, 12);
-            ctx.fillStyle = '#fbbf24';
-            ctx.fillRect(x + 6, y + h + 8, 14, 5);
-            ctx.fillRect(x + w - 20, y + h + 4, 14, 5);
-            ctx.strokeRect(x + 6, y + h + 8, 14, 5);
-            ctx.strokeRect(x + w - 20, y + h + 4, 14, 5);
+            // 점프 자세 (다리 모음)
+            ctx.fillStyle = '#1a252f';
+            ctx.fillRect(x + 4, y + h - 4, 14, 6);
+            ctx.fillRect(x + w - 18, y + h - 4, 14, 6);
+            ctx.strokeRect(x + 4, y + h - 4, 14, 6);
+            ctx.strokeRect(x + w - 18, y + h - 4, 14, 6);
         }
 
         // 2단점프 글로우 링
-        if (this.jumpsUsed === 2 && !this.onGround) {
+        if (this.jumpCount === 2 && !this.onGround) {
             ctx.save();
             const t = Math.sin(this.runFrame * 0.6) * 0.3 + 0.7;
-            ctx.strokeStyle = `rgba(253, 224, 71, ${t})`;
+            ctx.strokeStyle = `rgba(241, 196, 15, ${t})`;
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.arc(x + w / 2, y + h, 18, 0, Math.PI * 2);
             ctx.stroke();
-            ctx.strokeStyle = `rgba(253, 224, 71, ${t * 0.5})`;
+            ctx.strokeStyle = `rgba(241, 196, 15, ${t * 0.5})`;
             ctx.lineWidth = 6;
             ctx.beginPath();
             ctx.arc(x + w / 2, y + h, 22, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
         }
+    }
+
+    drawResultBanner(ctx, w, h) {
+        const isWin = this.resultIsWin;
+        const color = isWin ? 'rgba(46, 204, 113, 0.4)' : 'rgba(231, 76, 60, 0.4)';
+        const textColor = isWin ? '#2ecc71' : '#e74c3c';
+        const emoji = isWin ? this.preset.winEmoji : this.preset.loseEmoji;
+
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.fillStyle = 'rgba(26, 37, 47, 0.6)';
+        ctx.fillRect(0, h / 2 - 50, w, 100);
+
+        ctx.fillStyle = textColor;
+        ctx.font = 'bold 52px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${emoji} ${this.resultText}`, w / 2, h / 2);
+        ctx.textBaseline = 'alphabetic';
     }
 }
 
@@ -589,11 +940,12 @@ class Game {
         this.resizeCanvases();
         window.addEventListener('resize', () => this.resizeCanvases());
 
-        this.player1 = new Player(this.canvas1, '#2563eb', '#fbbf24', 'P1');
-        this.player2 = new Player(this.canvas2, '#dc2626', '#fbbf24', 'P2');
+        this.player1 = new Player(this.canvas1, PLAYER_PRESETS.p1);
+        this.player2 = new Player(this.canvas2, PLAYER_PRESETS.p2);
 
         this.score1El = document.getElementById('score1');
         this.score2El = document.getElementById('score2');
+        this.speedEl = document.getElementById('speed-display');
         this.overlay = document.getElementById('overlay');
         this.startOverlay = document.getElementById('start-overlay');
         this.resultText = document.getElementById('result-text');
@@ -606,7 +958,6 @@ class Game {
         this.lastTime = 0;
 
         this.bindInputs();
-        // 시작 오버레이만 표시한 채 대기 (버튼 클릭 시 카운트다운 시작)
         requestAnimationFrame(t => this.loop(t));
     }
 
@@ -623,10 +974,10 @@ class Game {
             if (e.repeat) return;
 
             if (this.state === STATE.PLAYING) {
-                if (e.key === 'w' || e.key === 'W' || e.code === 'KeyW') {
+                if (e.code === 'KeyW') {
                     this.player1.jump();
                 }
-                if (e.key === 'ArrowUp' || e.code === 'ArrowUp') {
+                if (e.code === 'ArrowUp') {
                     this.player2.jump();
                     e.preventDefault();
                 }
@@ -660,6 +1011,7 @@ class Game {
             } else if (n === 0) {
                 this.countdownEl.textContent = 'GO!';
                 this.state = STATE.PLAYING;
+                this.speedEl.textContent = '🏃 출발! 칼퇴를 향해!';
                 setTimeout(() => {
                     this.countdownEl.classList.add('hidden');
                 }, 600);
@@ -684,19 +1036,24 @@ class Game {
         this.score1El.textContent = Math.floor(this.player1.distance / 10) + ' m';
         this.score2El.textContent = Math.floor(this.player2.distance / 10) + ' m';
 
+        // 속도 표시
+        const avgSpeed = (this.player1.speed + this.player2.speed) / 2;
+        const pct = Math.floor((avgSpeed / BASE_SPEED) * 100);
+        this.speedEl.textContent = `🏃 현재 속도: ${pct}%`;
+
         // 승부 판정
-        if (!this.player1.alive || !this.player2.alive) {
-            // 둘 다 죽었는지, 한 명만 죽었는지 확인 후 잠시 후 종료 화면
-            if (!this.player1.alive && !this.player2.alive) {
-                setTimeout(() => this.finishGame(), 400);
-            } else {
-                // 한 명만 죽으면 살아있는 쪽이 즉시 승리
-                setTimeout(() => this.finishGame(), 600);
-            }
+        if (!this.player1.alive && !this.player2.resultIsWin) {
+            this.player2.win();
+            this.state = STATE.FINISHING;
+            setTimeout(() => this.finishGame('p2'), 1600);
+        } else if (!this.player2.alive && !this.player1.resultIsWin) {
+            this.player1.win();
+            this.state = STATE.FINISHING;
+            setTimeout(() => this.finishGame('p1'), 1600);
         }
     }
 
-    finishGame() {
+    finishGame(winnerKey) {
         if (this.state === STATE.FINISHED) return;
         this.state = STATE.FINISHED;
 
@@ -704,28 +1061,18 @@ class Game {
         const d2 = Math.floor(this.player2.distance / 10);
 
         let title, detail;
-        if (!this.player1.alive && !this.player2.alive) {
-            if (d1 > d2) {
-                title = '🏆 PLAYER 1 승리!';
-                detail = `P1: ${d1}m  vs  P2: ${d2}m`;
-            } else if (d2 > d1) {
-                title = '🏆 PLAYER 2 승리!';
-                detail = `P1: ${d1}m  vs  P2: ${d2}m`;
-            } else {
-                title = '🤝 무승부!';
-                detail = `둘 다 ${d1}m`;
-            }
-        } else if (!this.player1.alive) {
-            title = '🏆 PLAYER 2 승리!';
-            detail = `P1 탈락 (${d1}m) / P2 생존 (${d2}m)`;
+        if (winnerKey === 'p1') {
+            title = '🏆 팀장님 칼퇴 성공!';
+            detail = `사원(2P)은 야근 확정 — 기록: 팀장 ${d1}m / 사원 ${d2}m`;
         } else {
-            title = '🏆 PLAYER 1 승리!';
-            detail = `P2 탈락 (${d2}m) / P1 생존 (${d1}m)`;
+            title = '🏆 사원 칼퇴 성공!';
+            detail = `팀장(1P)은 야근 확정 — 기록: 팀장 ${d1}m / 사원 ${d2}m`;
         }
 
         this.resultText.textContent = title;
         this.resultDetail.textContent = detail;
         this.overlay.classList.remove('hidden');
+        this.speedEl.textContent = '🏁 경기 종료';
     }
 
     draw() {
@@ -736,7 +1083,13 @@ class Game {
     loop(t) {
         const dt = Math.min(48, t - this.lastTime || 16);
         this.lastTime = t;
-        this.update(dt);
+        if (this.state === STATE.PLAYING) {
+            this.update(dt);
+        } else if (this.state === STATE.FINISHING || this.state === STATE.FINISHED) {
+            // 우승자 칼퇴 애니메이션 + 색종이 계속 흐름
+            this.player1.update(dt);
+            this.player2.update(dt);
+        }
         this.draw();
         requestAnimationFrame(t2 => this.loop(t2));
     }
